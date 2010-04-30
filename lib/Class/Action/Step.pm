@@ -3,7 +3,7 @@ package Class::Action::Step;
 use warnings;
 use strict;
 
-$Class::Action::Step::VERSION = '0.1';
+$Class::Action::Step::VERSION = '0.2';
 
 # get a collection of step objects:
 
@@ -12,11 +12,61 @@ sub get_class_action_steps {
     return $class->_not_imp('get_class_action_steps');
 }
 
+# basic functionality convienience shortcut:
+
+# turn X=>sub {}, Y=>sub {} into CALLER::NS::X::execute() && CALLER::NS::Y::execute()
+# return list sutiable for get_class_action_steps() return value
+
+sub setup_class_execute_and_get_class_action_steps {
+    my $class = shift;
+    $class = ref($class) if ref($class);
+
+    no strict 'refs';
+
+    my @nss;
+
+    # no warnings 'redefine'; # we want to warn since it doesn't make
+    # much sense to pass an NS that already has execute() to this method
+
+    my $ar;    # re-use buffer, cheaper on memory
+    for $ar (@_) {
+        if ( $ar->[0] !~ m/\A[A-Za-z_][A-Za-z_0-9]*\z/ ) {
+            require Carp;
+            Carp::carp('Invalid string for use in a namespace');
+            @nss = ();
+            last;
+        }
+        if ( ref( $ar->[1] ) ne 'CODE' ) {
+            require Carp;
+            Carp::carp('Not a CODE reference');
+            @nss = ();
+            last;
+        }
+
+        push @{ $class . "::$ar->[0]" . '::ISA' }, $class;
+        *{ $class . "::$ar->[0]" . '::execute' } = $ar->[1];
+        push @nss, $class . "::$ar->[0]";
+    }
+
+    return @nss;
+}
+
+# basic functionality convienience shortcut:
+
+sub get_action_object {
+    require Class::Action;
+    my $action = Class::Action->new();
+    $action->set_steps_from_class(@_);
+    return $action;
+}
+
 #### mandatory step object methods ##
 
 sub new {
     my ($step_obj) = @_;
     return $step_obj->_not_imp('new');
+
+    # my ($step_obj, @args_to_execute) = @_;
 }
 
 sub clone_obj {
@@ -95,6 +145,13 @@ sub clean_failed_undo {
 
     # my ($step_obj, $global_data_hr, @args_to_execute) = @_;
     # final $step_obj->undo() cleanup since the $step_obj->undo() failed and we are not retrying
+    # void context
+}
+
+sub exec_stack_runtime_handler {
+    return;
+
+    # my ($step_obj, $current_exec_stack_entry_hr) = @_;
     # void context
 }
 

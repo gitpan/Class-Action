@@ -3,7 +3,7 @@ package Class::Action;
 use warnings;
 use strict;
 
-$Class::Action::VERSION = '0.1';
+$Class::Action::VERSION = '0.2';
 
 sub new {
     my ( $class, $args_hr ) = @_;
@@ -16,6 +16,7 @@ sub new {
         'exec_stack'   => [],
         '_needs_reset' => 0,
         'global_data'  => ref $args_hr->{'global_data'} eq 'HASH' ? $args_hr->{'global_data'} : {},
+        'enable_cwd' => $args_hr->{'enable_cwd'} || 0,
     }, $class;
 
     # for my $name qw(set_steps_from_class append_steps_from_class prepend_steps_from_class) {
@@ -33,13 +34,14 @@ sub new {
 sub set_steps {
     my ( $self, @steps ) = @_;
     @{ $self->{'step_stack'} } = @steps == 1 && ref $steps[0] eq 'ARRAY' ? @{ $steps[0] } : @steps;
+    return @{ $self->{'step_stack'} };
 }
 
 sub set_steps_from_class {
     my ( $self, $class, @args ) = @_;
 
     if ( !ref($class) && $class =~ m/\A[a-zA-Z0-9_]+(?:\:\:[a-zA-Z0-9_]+)*\z/ ) {
-        eval { require $class; 1 };
+        eval qq{ require $class; 1 };
     }
 
     if ( $class->can('get_class_action_steps') ) {
@@ -49,7 +51,10 @@ sub set_steps_from_class {
         $self->set_steps();
         require Carp;
         Carp::carp("$class does not implement get_class_action_steps()");
+        return;
     }
+
+    return @{ $self->{'step_stack'} };
 }
 
 sub get_steps {
@@ -60,14 +65,14 @@ sub get_steps {
 sub append_steps {
     my ( $self, @steps ) = @_;
     push @{ $self->{'step_stack'} }, @steps == 1 && ref $steps[0] eq 'ARRAY' ? @{ $steps[0] } : @steps;
-    @{ $self->{'step_stack'} };
+    return @{ $self->{'step_stack'} };
 }
 
 sub append_steps_from_class {
     my ( $self, $class, @args ) = @_;
 
     if ( !ref($class) && $class =~ m/\A[a-zA-Z0-9_]+(?:\:\:[a-zA-Z0-9_]+)*\z/ ) {
-        eval { require $class; 1 };
+        eval qq{ require $class; 1 };
     }
 
     if ( $class->can('get_class_action_steps') ) {
@@ -76,20 +81,23 @@ sub append_steps_from_class {
     else {
         require Carp;
         Carp::carp("$class does not implement get_class_action_steps()");
+        return;
     }
+
+    return @{ $self->{'step_stack'} };
 }
 
 sub prepend_steps {
     my ( $self, @steps ) = @_;
     unshift @{ $self->{'step_stack'} }, @steps == 1 && ref $steps[0] eq 'ARRAY' ? @{ $steps[0] } : @steps;
-    @{ $self->{'step_stack'} };
+    return @{ $self->{'step_stack'} };
 }
 
 sub prepend_steps_from_class {
     my ( $self, $class, @args ) = @_;
 
     if ( !ref($class) && $class =~ m/\A[a-zA-Z0-9_]+(?:\:\:[a-zA-Z0-9_]+)*\z/ ) {
-        eval { require $class; 1 };
+        eval qq{ require $class; 1 };
     }
 
     if ( $class->can('get_class_action_steps') ) {
@@ -98,7 +106,10 @@ sub prepend_steps_from_class {
     else {
         require Carp;
         Carp::carp("$class does not implement get_class_action_steps()");
+        return;
     }
+
+    return @{ $self->{'step_stack'} };
 }
 
 sub clone {
@@ -134,6 +145,7 @@ sub reset {
         $step->reset_obj_state();
     }
 
+    delete $self->{'starting_cwd'};
     delete $self->{'_execute'};
     delete $self->{'_rollback'};
     delete $self->{'_undo'};
@@ -150,9 +162,13 @@ sub reset {
 
 sub execute {
     my ( $self, @step_args ) = @_;
+
     $self->reset() if exists $self->{'_execute'} && !$self->{'_execute'};    # we've been successfully executed so reset and go again
     $self->reset() if $self->{'_needs_reset'}++;                             # called when in "examine results" state
     return if $self->{'_execute'} || $self->{'_rollback'};                   # execute() called after failed execute() or after failed rollback()
+
+    $self->set_starting_cwd() if $self->{'enable_cwd'};
+
     $self->{'_execute'}++;
     my $execute_failed = 0;
 
@@ -165,21 +181,30 @@ sub execute {
         if ( !$step->execute( $self->{'global_data'}, @step_args ) ) {
             if ( $step->retry_execute( $self->{'global_data'}, @step_args ) ) {
                 $self->{'last_errstr'} = $step->{'last_errstr'} if exists $step->{'last_errstr'};
+
                 push @{ $self->{'exec_stack'} }, { 'errstr' => $step->{'last_errstr'}, 'type' => 'execute', 'step' => ( $step->state || ref($step) ), 'ns' => ref($step), 'status' => undef };
+                $step->exec_stack_runtime_handler( $self->{'exec_stack'}->[-1] );
+
                 redo STEP;
             }
             else {
                 $self->{'last_errstr'} = $step->{'last_errstr'} if exists $step->{'last_errstr'};
+
                 push @{ $self->{'exec_stack'} }, { 'errstr' => $step->{'last_errstr'}, 'type' => 'execute', 'step' => ( $step->state || ref($step) ), 'ns' => ref($step), 'status' => 0 };
+                $step->exec_stack_runtime_handler( $self->{'exec_stack'}->[-1] );
+
                 $step->clean_failed_execute( $self->{'global_data'}, @step_args );
                 $step->reset_obj_state();
                 $execute_failed++;
+
                 last STEP;
             }
         }
         else {
             $self->{'last_errstr'} = $step->{'last_errstr'} if exists $step->{'last_errstr'};
+
             push @{ $self->{'exec_stack'} }, { 'errstr' => $step->{'last_errstr'}, 'type' => 'execute', 'step' => ( $step->state || ref($step) ), 'ns' => ref($step), 'status' => 1 };
+            $step->exec_stack_runtime_handler( $self->{'exec_stack'}->[-1] );
         }
     }
 
@@ -212,6 +237,7 @@ sub rollback {
         if ( !$step->undo( $self->{'global_data'}, @step_args ) ) {
             if ( $step->retry_undo( $self->{'global_data'}, @step_args ) ) {
                 $self->{'last_errstr'} = $step->{'last_errstr'} if exists $step->{'last_errstr'};
+
                 push @{ $self->{'exec_stack'} },
                   {
                     'errstr' => $step->{'last_errstr'},
@@ -220,22 +246,28 @@ sub rollback {
                     'ns' => ref($step),
                     'status' => undef
                   };
+                $step->exec_stack_runtime_handler( $self->{'exec_stack'}->[-1] );
+
                 redo UNDO;
             }
             else {
                 $self->{'last_errstr'} = $step->{'last_errstr'} if exists $step->{'last_errstr'};
-                push @{ $self->{'exec_stack'} },
-                  { 'errstr' => $step->{'last_errstr'}, 'type' => ( $self->{'_rollback_is_undo'} ? 'undo' : 'rollback' ), 'step' => ( $step->state || ref($step) ), 'ns' => ref($step), 'status' => 0 };
+
+                push @{ $self->{'exec_stack'} }, { 'errstr' => $step->{'last_errstr'}, 'type' => ( $self->{'_rollback_is_undo'} ? 'undo' : 'rollback' ), 'step' => ( $step->state || ref($step) ), 'ns' => ref($step), 'status' => 0 };
+                $step->exec_stack_runtime_handler( $self->{'exec_stack'}->[-1] );
+
                 $step->clean_failed_undo( $self->{'global_data'}, @step_args );
                 $step->reset_obj_state();
                 $rollback_failed++;
+
                 last UNDO;
             }
         }
         else {
             $self->{'last_errstr'} = $step->{'last_errstr'} if exists $step->{'last_errstr'};
-            push @{ $self->{'exec_stack'} },
-              { 'errstr' => $step->{'last_errstr'}, 'type' => ( $self->{'_rollback_is_undo'} ? 'undo' : 'rollback' ), 'step' => ( $step->state || ref($step) ), 'ns' => ref($step), 'status' => 1 };
+
+            push @{ $self->{'exec_stack'} }, { 'errstr' => $step->{'last_errstr'}, 'type' => ( $self->{'_rollback_is_undo'} ? 'undo' : 'rollback' ), 'step' => ( $step->state || ref($step) ), 'ns' => ref($step), 'status' => 1 };
+            $step->exec_stack_runtime_handler( $self->{'exec_stack'}->[-1] );
         }
     }
 
@@ -288,15 +320,32 @@ sub undo_called {
     return;
 }
 
+sub get_enable_cwd { $_[0]->{'enable_cwd'} }
+
+sub set_enable_cwd { $_[0]->{'enable_cwd'} = $_[1] }
+
+sub get_starting_cwd {
+    return if !exists $_[0]->{'starting_cwd'};
+    return $_[0]->{'starting_cwd'};
+}
+
+sub set_starting_cwd {
+    require Cwd;
+    my $current = $_[0]->{'starting_cwd'};
+    $_[0]->{'starting_cwd'} = Cwd::cwd();
+    return $current if $current;
+    return 1;
+}
+
 sub next_step {
     my ($self) = @_;
 
     my $stack_length = @{ $self->{'step_stack'} };
 
-    # why would this happen? (i.e. none set) carp ?
     if ( !$stack_length ) {
-
-        # Carp::carp('Stack is empty.');
+        require Carp;
+        local $Carp::CarpLevel = $Carp::CarpLevel + 1;
+        Carp::carp('This action has no steps.');
         return;
     }
 
@@ -323,8 +372,9 @@ sub prev_step {
 
     # why would this happen? (i.e. none set) carp ?
     if ( !$stack_length ) {
-
-        # Carp::carp('Stack is empty.');
+        require Carp;
+        local $Carp::CarpLevel = $Carp::CarpLevel + 1;
+        Carp::carp('This action has no steps.');
         return;
     }
 

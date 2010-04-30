@@ -45,6 +45,8 @@ This is helpful for encapsulating complex tasks into a single entity.
 
 =head2 Object setup related methods
 
+Note: all step stack modifying methods return an array of the stack after it has been modified. It can return nothing is stack is empty or there was a problem.
+
 =over 4
 
 =item new
@@ -59,6 +61,10 @@ The hash can have the following keys:
 
 Boolean of whether to do auto rollback or not. Default is true.
 
+=item 'enable_cwd'
+
+Boolean of whether to call set_starting_cwd() at the beginning of execute()ing our step stack. Default is false.
+
 =item 'global_data'
 
 A hashref that is passed around between steps for aggregate behavior.
@@ -69,7 +75,7 @@ An array ref containing the L<Class::Action::Step> items that make up this actio
 
 'set_steps_from_class' overrides this data.
 
-=item  'set_steps_from_class'
+=item 'set_steps_from_class'
 
 A L<Class::Action::Step> compatible class name or an array ref containg that class name followed by arguments to pass to the class's get_class_action_steps() method.
 
@@ -113,6 +119,14 @@ Returns the boolean on/off state of auto rollback mode.
 
 Sets the boolean on/off state of auto rollback mode.
 
+=item get_enable_cwd
+
+Returns the boolean on/off state of CWD mode.
+
+=item set_enable_cwd
+
+Sets the boolean on/off state of CWD mode.
+
 =back
 
 =head2 Action related methods
@@ -152,6 +166,12 @@ Reset the internal state of the object, inclduing all of the boolean items below
 =item get_errstr
 
 Gets the last error, if any.
+
+=item get_starting_cwd
+
+Get the directory the script was in when it started running the steps.
+
+This is only set if get_enable_cwd() is true (i.e. you called get_enable_cwd(1) or passed 'enable_cwd' => 1 to new()).
 
 =item get_execution_state
 
@@ -245,6 +265,10 @@ The index of the previous step that was run. returns false (non-numeric) when th
 
 Sets the object's "last error".
 
+=item set_starting_cwd
+
+Brings in Cwd.pm if needed and stores Cwd::cwd() in the object.
+
 =back
 
 =head1 DIAGNOSTICS
@@ -258,6 +282,10 @@ The class name passed to set_steps_from_class(), append_steps_from_class(), or p
 In this case of set_steps_from_class() the step stack will be empty. 
 
 In the case of append_steps_from_class() and prepend_steps_from_class() the step step is not modified.
+
+=item C<< This action has no steps. >>
+
+You've called a method (e.g. execute()) that operates on steps and there are no steps setup in the action object.
 
 =back
 

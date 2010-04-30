@@ -4,7 +4,7 @@ Class::Action::Step - Base class for use by Class::Action "step" objects
 
 =head1 VERSION
 
-This document describes Class::Action::Step version 0.1
+This document describes Class::Action::Step version 0.2
 
 =head1 SYNOPSIS
 
@@ -34,31 +34,14 @@ This document describes Class::Action::Step version 0.1
 Then in your script:
 
     use Class::Action;
-    use MyAction;
     my $action = Class::Action->new();
     $action->set_steps_from_class('MyAction');
     $action->execute("3.14159") or die $action->get_errstr();
     $action->execute("1.61803") or die $action->get_errstr();
-
-or wrap it up even more w/ something like this:
-
-   package MyAction;
-   
-   ...
-   
-   use Class::Action;
-   
-   sub get_action_object {
-       my $action = Class::Action->new();
-       $action->set_steps_from_class(@_);
-       return $action;
-   }
-   
-   sub get_class_action_steps {
-   
-   ...
  
-Then in your script:
+Instead you could use the 'get_action_object()' method that you could define or inherit from Class::Action::Step.
+
+Then your script would look like this:
 
     use MyAction;
     my $action = MyAction->get_action_object();
@@ -91,13 +74,13 @@ essentially calls:
 
    Your::Class::Here->get_class_action_steps(1,2,3)
 
-If it returns a namespace then that namespace's new() is called when it is run in execute() and rollback().
+If it returns a namespace then that namespace's new() is called when it is run in execute(), rollback(), and undo().
 
-Step::NS->new() is called with the arguments passed to execute() and rollback()
+Step::NS->new() is called with the arguments passed to execute(), rollback(), and undo()
 
 =head2 Class::Action::Step compatible
 
-The following methods are used in Class::Action->execute() and Class::Action->rollback() and therefore need defined in your "step" classes.
+The following methods are used in Class::Action->execute(), Class::Action->rollback(), and Class::Action->undo() and therefore need defined in your "step" classes.
 
 =head2 Mandatory methods
 
@@ -124,7 +107,7 @@ Takes no arguments, resets the internal state of the object, called in void cont
 =item execute()
 
 The first argument (after the object itself of course) is a hash reference of "global" data that each "step" object can modify in order to aggregate data, report, back and communicate between each other.
- 
+
 The remaining arguments are the arguments passed to the main Class::Action object's execute() method.
 
 It should return true if it was successful, false otherwise.
@@ -170,12 +153,66 @@ This is equivalent to $step_obj->execute() except that it should undo what execu
 
 This is equivalent to $step_obj->retry_execute() except that it's return value indicates whether we should try to run the $step_obj->undo() that failed again.
 
-
 =item clean_failed_undo()
 
 This is equivalent to $step_obj->clean_failed_execute() except that it relate's to the entire rollback/undo process instead of execute process.
 
+=item exec_stack_runtime_handler()
+
+Sometimes you don't want to wait until an action has completed in order to call Class::Action->get_execution_state() and examine the result stack.
+
+If you'd rather examine each item as it is added (e.g. report progress to the UI in real time, alert admins ASAP, etc.) to the final result stack as returned by Class::Action->get_execution_state() you could define this method in your Step class.
+
+It's arguments are the step object and the hashref of info as described in Class::Action->get_execution_state() POD.
+
+It is called in void context.
+
 =back
+
+=head2 Convenience methods
+
+=over 4
+
+=item get_action_object()
+
+This basic convienience method will bring in Class::Action if needed, create a basic Class::Action object (no args to new), then pass though your args ultimately to to the class's get_class_action_steps().
+
+If this is too simplistic for your needs feel free to not use it.
+
+=item setup_class_execute_and_get_class_action_steps()
+
+This convienience method assists in the setup of multiple step classes.
+
+Assuming 'MyClass' ISA Class::Action::Step, has defined it's own basic methods (i.e. at least all of the mandatory ones except execute()) you can then use this method to build the class structure you need with the different execute's you need.
+
+    package MyClass;
+    
+    @MyClass::ISA = qw(Class::Action::Step);
+    
+    ...
+    
+    sub get_class_action_steps {
+        ...        
+        return [
+            ...
+            __PACKAGE__->setup_class_execute_and_get_class_action_steps(
+                [A => sub {...}],
+                [B => sub {...}],
+                [C => sub {...}],    
+            )
+            ...
+        ];
+    }
+    
+    ...
+
+This will setup MyClass::A, MyClass::B, and MyClass::C's @ISA and defines their execute() with the given code ref.
+
+It returns an array of full name spaces appropriate for get_class_action_steps().
+
+If this is too simplistic for your needs feel free to not use it.
+
+=back 
 
 =head1 DIAGNOSTICS
 
