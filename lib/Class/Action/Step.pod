@@ -4,7 +4,7 @@ Class::Action::Step - Base class for use by Class::Action "step" objects
 
 =head1 VERSION
 
-This document describes Class::Action::Step version 0.2
+This document describes Class::Action::Step version 0.3
 
 =head1 SYNOPSIS
 

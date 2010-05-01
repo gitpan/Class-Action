@@ -3,7 +3,7 @@ package Class::Action::Step;
 use warnings;
 use strict;
 
-$Class::Action::Step::VERSION = '0.2';
+$Class::Action::Step::VERSION = '0.3';
 
 # get a collection of step objects:
 

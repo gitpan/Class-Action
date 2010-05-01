@@ -3,7 +3,7 @@ package Class::Action;
 use warnings;
 use strict;
 
-$Class::Action::VERSION = '0.2';
+$Class::Action::VERSION = '0.3';
 
 sub new {
     my ( $class, $args_hr ) = @_;

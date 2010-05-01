@@ -9,6 +9,7 @@ my $builder = Module::Build->new(
     dist_version_from   => 'lib/Class/Action.pm',
     requires => {
         'Test::More' => 0,
+        'Test::Carp' => 0,
     },
     add_to_cleanup      => [ 'Class-Action-*' ],
 );

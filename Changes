@@ -1,5 +1,9 @@
 Revision history for Class-Action
 
+0.3  Sat May  1 14:07:54 2010
+    - Add Test::Carp requirement in Build.PL and Makefile.PL for t/
+    - update overlooked version in POD
+    
 0.2  Wed Apr 28 23:23:09 2010
     - added "starting cwd" options
     - added exec_stack_runtime_handler() step object method support

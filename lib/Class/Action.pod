@@ -4,7 +4,7 @@ Class::Action - Basic command pattern obj undo/rollback actions
 
 =head1 VERSION
 
-This document describes Class::Action version 0.1
+This document describes Class::Action version 0.3
 
 =head1 SYNOPSIS
 
