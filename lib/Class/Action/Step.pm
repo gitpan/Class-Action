@@ -3,7 +3,7 @@ package Class::Action::Step;
 use warnings;
 use strict;
 
-$Class::Action::Step::VERSION = '0.3';
+$Class::Action::Step::VERSION = '0.4';
 
 # get a collection of step objects:
 
@@ -45,6 +45,11 @@ sub setup_class_execute_and_get_class_action_steps {
 
         push @{ $class . "::$ar->[0]" . '::ISA' }, $class;
         *{ $class . "::$ar->[0]" . '::execute' } = $ar->[1];
+
+        if ( ref($ar->[2]) eq 'CODE' ) {
+            *{ $class . "::$ar->[0]" . '::undo' } = $ar->[2];
+        }
+        
         push @nss, $class . "::$ar->[0]";
     }
 

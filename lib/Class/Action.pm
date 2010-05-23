@@ -3,7 +3,7 @@ package Class::Action;
 use warnings;
 use strict;
 
-$Class::Action::VERSION = '0.3';
+$Class::Action::VERSION = '0.4';
 
 sub new {
     my ( $class, $args_hr ) = @_;
@@ -175,7 +175,14 @@ sub execute {
     my $step;                                                                # more memory efficient than while my $var
   STEP:
     while ( $step = $self->next_step() ) {
-        $step = $step->new(@step_args) if !ref($step);
+        my $ref = ref($step);
+        if (!$ref) {
+            $step = $step->new(@step_args);
+        }
+        elsif ($ref eq 'ARRAY') {
+            $step = $step->[0]->new( @{$step}[ 1 .. scalar(@{$step}) - 1 ], \@step_args );
+        }
+        
         delete $step->{'last_errstr'};
 
         if ( !$step->execute( $self->{'global_data'}, @step_args ) ) {
@@ -231,7 +238,14 @@ sub rollback {
     my $step;                                                             # more memory efficient than while my $var
   UNDO:
     while ( $step = $self->prev_step() ) {
-        $step = $step->new(@step_args) if !ref($step);
+        my $ref = ref($step);
+        if (!$ref) {
+            $step = $step->new(@step_args);
+        }
+        elsif ($ref eq 'ARRAY') {
+            $step = $step->[0]->new( @{$step}[ 1 .. scalar(@{$step}) - 1 ], \@step_args );
+        }
+        
         delete $step->{'last_errstr'};
 
         if ( !$step->undo( $self->{'global_data'}, @step_args ) ) {

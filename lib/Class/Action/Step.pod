@@ -4,7 +4,7 @@ Class::Action::Step - Base class for use by Class::Action "step" objects
 
 =head1 VERSION
 
-This document describes Class::Action::Step version 0.3
+This document describes Class::Action::Step version 0.4
 
 =head1 SYNOPSIS
 
@@ -58,7 +58,7 @@ This module contains definitions for all the necessary methods a "step" class ne
 
 This method needs defined in Your::Class::Here in order to be passed to $action->set_steps_from_class('Your::Class::Here')
 
-It should return an array or array reference of objects and/or name spaces that are Class::Action::Step compatible.
+It should return an array or array reference of objects, namespaces that are Class::Action::Step compatible, and/or array refs as described below.
 
    $action->set_steps_from_class('Your::Class::Here');
 
@@ -77,6 +77,18 @@ essentially calls:
 If it returns a namespace then that namespace's new() is called when it is run in execute(), rollback(), and undo().
 
 Step::NS->new() is called with the arguments passed to execute(), rollback(), and undo()
+
+If it returns an array ref then the first argument is treated as the name space and the rest of the list is the arguments to it's new() method. The arguments passed to execute(), rollback(), and undo() are passed as an array ref in the last argument to new().
+
+    sub get_class_action_steps {
+        my ($this_class, @args_to_from_class_method) = @_;
+        
+        return [
+            Class::A->new(\%a_args), # object is used every time
+            'Class::B',              # Class::B->new(@step_args) every time
+            ['Class::C',1,2,3],      # Class::C->new(1,2,3,\@step_args) every time
+        ];
+    }
 
 =head2 Class::Action::Step compatible
 
@@ -183,7 +195,7 @@ If this is too simplistic for your needs feel free to not use it.
 
 This convienience method assists in the setup of multiple step classes.
 
-Assuming 'MyClass' ISA Class::Action::Step, has defined it's own basic methods (i.e. at least all of the mandatory ones except execute()) you can then use this method to build the class structure you need with the different execute's you need.
+Assuming 'MyClass' ISA Class::Action::Step, has defined it's own basic methods (i.e. at least all of the mandatory ones except execute()) you can then use this method to build the class structure you need with the different execute()'s (and optionally undo()'s) you need.
 
     package MyClass;
     
@@ -209,6 +221,25 @@ Assuming 'MyClass' ISA Class::Action::Step, has defined it's own basic methods (
 This will setup MyClass::A, MyClass::B, and MyClass::C's @ISA and defines their execute() with the given code ref.
 
 It returns an array of full name spaces appropriate for get_class_action_steps().
+
+A second coderef will be used as the class's undo() method:
+
+    sub get_class_action_steps {
+        ...        
+        return [
+            ...
+            __PACKAGE__->setup_class_execute_and_get_class_action_steps(
+                [A => sub {...}, sub { ... undo ... }],
+                [B => sub {...}],
+                [C => sub {...}, sub { ... undo ... }],    
+            )
+            ...
+        ];
+    }
+
+This will setup MyClass::A, MyClass::B, and MyClass::C's @ISA and defines their execute() with the given code ref.
+
+In addition MyClass::A and MyClass::C will have their undo()s defined
 
 If this is too simplistic for your needs feel free to not use it.
 
